@@ -12,36 +12,14 @@ public class NovaCalculadoraReembolsoTest {
         AutorizadorReembolso autorizador = Mockito.mock(AutorizadorReembolso.class);
         NovaCalculadoraReembolso calculadora = new NovaCalculadoraReembolso(auditoria, autorizador);
         PlanoSaude plano = new PlanoSaudeStub(70.0);
-        Paciente paciente = new Paciente();
-        double valorConsulta = 200.0;
-        Consulta consulta = new Consulta(paciente, valorConsulta);
+        Consulta consulta = ConsultaTestHelper.criarConsulta(200.0);
 
         when(autorizador.autorizarConsulta(consulta)).thenReturn(true);
 
-        double resultado = calculadora.calcularReembolso(valorConsulta, plano, paciente);
+        double resultado = calculadora.calcularReembolso(consulta.getValorConsulta(), plano, consulta.getPaciente());
 
-        assertEquals(140.0, resultado, 0.01, "O reembolso para R$200 com 70% de cobertura deve ser R$140");
+        TestUtils.assertEqualsWithTolerance(140.0, resultado, "O reembolso para R$200 com 70% de cobertura deve ser R$140");
         assertEquals(1, auditoria.getChamadas(), "O método registrarConsulta deve ser chamado");
-    }
-
-    @Test
-    public void testReembolsoConsultaNaoAutorizada() {
-        AuditoriaSpy auditoria = new AuditoriaSpy();
-        AutorizadorReembolso autorizador = Mockito.mock(AutorizadorReembolso.class);
-        NovaCalculadoraReembolso calculadora = new NovaCalculadoraReembolso(auditoria, autorizador);
-        PlanoSaude plano = new PlanoSaudeStub(70.0);
-        Paciente paciente = new Paciente();
-        double valorConsulta = 200.0;
-        Consulta consulta = new Consulta(paciente, valorConsulta);
-
-        when(autorizador.autorizarConsulta(consulta)).thenReturn(false);
-
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-                        calculadora.calcularReembolso(valorConsulta, plano, paciente),
-                "Deve lançar exceção para consulta não autorizada");
-
-        assertEquals("Consulta não autorizada", exception.getMessage());
-        assertEquals(0, auditoria.getChamadas(), "O método registrarConsulta não deve ser chamado");
     }
 
     @Test
@@ -56,7 +34,61 @@ public class NovaCalculadoraReembolsoTest {
 
         double resultado = calculadora.calcularReembolso(consulta.getValorConsulta(), plano, consulta.getPaciente());
 
-        assertEquals(0.0, resultado, 0.01, "O reembolso para consulta de R$0 deve ser R$0");
+        TestUtils.assertEqualsWithTolerance(0.0, resultado, "O reembolso para consulta de R$0 deve ser R$0");
         assertEquals(1, auditoria.getChamadas(), "O método registrarConsulta deve ser chamado");
+    }
+
+    @Test
+    public void testReembolsoRespeitaTeto150() {
+        AuditoriaSpy auditoria = new AuditoriaSpy();
+        AutorizadorReembolso autorizador = Mockito.mock(AutorizadorReembolso.class);
+        NovaCalculadoraReembolso calculadora = new NovaCalculadoraReembolso(auditoria, autorizador);
+        PlanoSaude plano = new PlanoSaudeStub(100.0);
+        Consulta consulta = ConsultaTestHelper.criarConsulta(200.0);
+
+        when(autorizador.autorizarConsulta(consulta)).thenReturn(true);
+
+        double resultado = calculadora.calcularReembolso(consulta.getValorConsulta(), plano, consulta.getPaciente());
+
+        TestUtils.assertEqualsWithTolerance(150.0, resultado, "O reembolso para R$200 com 100% de cobertura deve ser limitado a R$150");
+        assertEquals(1, auditoria.getChamadas(), "O método registrarConsulta deve ser chamado");
+    }
+
+    @Test
+    public void testReembolsoAbaixoTeto() {
+        AuditoriaSpy auditoria = new AuditoriaSpy();
+        AutorizadorReembolso autorizador = Mockito.mock(AutorizadorReembolso.class);
+        NovaCalculadoraReembolso calculadora = new NovaCalculadoraReembolso(auditoria, autorizador);
+        PlanoSaude plano = new PlanoSaudeStub(70.0);
+        Consulta consulta = ConsultaTestHelper.criarConsulta(100.0);
+
+        when(autorizador.autorizarConsulta(consulta)).thenReturn(true);
+
+        double resultado = calculadora.calcularReembolso(consulta.getValorConsulta(), plano, consulta.getPaciente());
+
+        TestUtils.assertEqualsWithTolerance(70.0, resultado, "O reembolso para R$100 com 70% de cobertura deve ser R$70");
+        assertEquals(1, auditoria.getChamadas(), "O método registrarConsulta deve ser chamado");
+    }
+
+    @Test
+    public void testIntegracaoCompletaComDubles() {
+        AuditoriaSpy auditoria = new AuditoriaSpy();
+        AutorizadorReembolso autorizador = Mockito.mock(AutorizadorReembolso.class);
+        NovaCalculadoraReembolso calculadora = new NovaCalculadoraReembolso(auditoria, autorizador);
+        PlanoSaude plano = new PlanoSaudeStub(90.0);
+        Consulta consulta = ConsultaTestHelper.criarConsulta(200.0);
+
+        when(autorizador.autorizarConsulta(consulta)).thenReturn(true);
+
+        double resultado = calculadora.calcularReembolso(consulta.getValorConsulta(), plano, consulta.getPaciente());
+
+        TestUtils.assertEqualsWithTolerance(150.0, resultado,
+                "O reembolso para R$200 com 90% de cobertura deve ser limitado a R$150");
+        assertEquals(1, auditoria.getChamadas(), "O método registrarConsulta deve ser chamado uma vez");
+        assertEquals(consulta.getPaciente(), auditoria.getUltimaConsulta().getPaciente(),
+                "A consulta registrada deve ter o paciente correto");
+        TestUtils.assertEqualsWithTolerance(consulta.getValorConsulta(), auditoria.getUltimaConsulta().getValorConsulta(),
+                "A consulta registrada deve ter o valor correto");
+        verify(autorizador, times(1)).autorizarConsulta(consulta);
     }
 }

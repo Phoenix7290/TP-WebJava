@@ -16,6 +16,7 @@ public class NovaCalculadoraReembolso {
 
     private final Auditoria auditoria;
     private final AutorizadorReembolso autorizador;
+    private static final double TETO_REEMBOLSO = 150.0;
 
     public NovaCalculadoraReembolso(Auditoria auditoria, AutorizadorReembolso autorizador) {
         this.auditoria = auditoria;
@@ -28,7 +29,8 @@ public class NovaCalculadoraReembolso {
             throw new IllegalStateException("Consulta não autorizada");
         }
         auditoria.registrarConsulta(consulta);
-        return valorConsulta * (plano.getPercentualCobertura() / 100.0);
+        double reembolso = valorConsulta * (plano.getPercentualCobertura() / 100.0);
+        return Math.min(reembolso, TETO_REEMBOLSO);
     }
 
 
